@@ -972,6 +972,7 @@ describe("with transport", function(){
   describe("leave", function(){
     let clock
     let socketSpy
+    const chanParams = {one: "two"}
 
     beforeEach(function(){
       clock = sinon.useFakeTimers()
@@ -980,7 +981,7 @@ describe("with transport", function(){
       sinon.stub(socket, "isConnected").callsFake(() => true)
       socketSpy = sinon.stub(socket, "push")
 
-      channel = socket.channel("topic", {one: "two"})
+      channel = socket.channel("topic", chanParams)
       channel.join().trigger("ok", {})
     })
 
@@ -997,7 +998,7 @@ describe("with transport", function(){
       assert.ok(socketSpy.calledWith({
         topic: "topic",
         event: "phx_leave",
-        payload: {},
+        payload: chanParams,
         ref: defaultRef,
         join_ref: joinRef
       }))
