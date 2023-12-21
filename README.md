@@ -1,5 +1,15 @@
 ## Whatnot's fork of phoenix -- used for Web JS package
 
+### ADD / UPDATE TESTS FOR YOUR CHANGES
+- See `assets/js/test`
+- run with `npm test` 
+
+### Envinronment
+Suggested versions for local development; use `nvm` to manage
+- `node 18.19.0`
+- `npm 10.2.3`
+
+-----
 
 ![phoenix logo](https://raw.githubusercontent.com/phoenixframework/phoenix/main/priv/static/phoenix.png)
 
