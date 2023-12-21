@@ -4,7 +4,7 @@
 - See `assets/js/test`
 - run with `npm test` 
 
-### Envinronment
+### Environment
 Suggested versions for local development; use `nvm` to manage
 - `node 18.19.0`
 - `npm 10.2.3`
