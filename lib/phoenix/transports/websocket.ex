@@ -47,6 +47,11 @@ defmodule Phoenix.Transports.WebSocket do
         keys = Keyword.get(opts, :connect_info, [])
         connect_info = Transport.connect_info(conn, endpoint, keys)
 
+        opts = case Keyword.fetch!(opts, :timeout) do
+            {m, f, a} -> Keyword.put(opts, :timeout, apply(m, f, a))
+            _ -> opts
+          end
+
         config = %{
           endpoint: endpoint,
           transport: :websocket,
