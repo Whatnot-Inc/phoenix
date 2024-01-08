@@ -91,12 +91,18 @@ defmodule Phoenix.Integration.WebSocketTest do
       websocket: [path: "nested/path", check_origin: ["//example.com"], timeout: 200],
       custom: :value
 
+    socket "/custom/timeout", UserSocket,
+      websocket: [path: "/", timeout: {Endpoint, :websocket_timeout, []}],
+      custom: :value
+
     socket "/custom/:socket_var", UserSocket,
       websocket: [path: ":path_var/path", check_origin: ["//example.com"], timeout: 200],
       custom: :value
 
     socket "/ws/ping", PingSocket,
       websocket: true
+
+    def websocket_timeout, do: 50
   end
 
   setup_all do
@@ -159,6 +165,16 @@ defmodule Phoenix.Integration.WebSocketTest do
   test "allows a custom path" do
     path = "ws://127.0.0.1:#{@port}/custom/some_path/nested/path"
     assert {:ok, _} = WebsocketClient.connect(self(), "#{path}?key=value", :noop)
+  end
+
+  test "websocket timeout can be provided via MFA" do
+    path = "ws://127.0.0.1:#{@port}/custom/timeout/"
+    {:ok, client} = WebsocketClient.connect(self(), path, :noop)
+    WebsocketClient.send(client, {:text, "ping"})
+    assert_receive {:text, "pong"}
+
+    Process.sleep(100)
+    refute Process.alive?(client)
   end
 
   test "allows a path with variables" do
