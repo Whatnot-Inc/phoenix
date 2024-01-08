@@ -102,7 +102,7 @@ defmodule Phoenix.Integration.WebSocketTest do
     socket "/ws/ping", PingSocket,
       websocket: true
 
-    def websocket_timeout, do: 300
+    def websocket_timeout, do: 50
   end
 
   setup_all do
@@ -172,6 +172,9 @@ defmodule Phoenix.Integration.WebSocketTest do
     {:ok, client} = WebsocketClient.connect(self(), path, :noop)
     WebsocketClient.send(client, {:text, "ping"})
     assert_receive {:text, "pong"}
+
+    Process.sleep(100)
+    refute Process.alive?(client)
   end
 
   test "allows a path with variables" do
