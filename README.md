@@ -2,12 +2,19 @@
 
 ### ADD / UPDATE TESTS FOR YOUR CHANGES
 - See `assets/js/test`
-- run with `npm test` 
+- run with `npm test`
 
 ### Environment
-Suggested versions for local development; use `nvm` to manage
+Suggested versions for local development
+use `nvm` to manage
 - `node 18.19.0`
 - `npm 10.2.3`
+
+### Build changes from assets/js -> minified js (priv/static)
+- have erlang and elixir installed; `brew install erlang`, `brew install elixir` if needed
+- `mix deps.get`
+- `mix assets.build`
+- changes made in assets/js should now be reflected in minified js; include in commit
 
 -----
 
