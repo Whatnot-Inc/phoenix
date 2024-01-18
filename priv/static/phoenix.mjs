@@ -391,7 +391,7 @@ var Channel = class {
         this.socket.log("channel", `leave ${this.topic}`);
       this.trigger(CHANNEL_EVENTS.close, "leave");
     };
-    let leavePush = new Push(this, CHANNEL_EVENTS.leave, closure({}), timeout);
+    let leavePush = new Push(this, CHANNEL_EVENTS.leave, this.params, timeout);
     leavePush.receive("ok", () => onClose()).receive("timeout", () => onClose());
     leavePush.send();
     if (!this.canPush()) {
