@@ -672,7 +672,11 @@ defmodule Phoenix.Socket do
               payload: reply
             }
 
+
             state = put_channel(state, pid, topic, join_ref)
+
+            num_channels = map_size(state.channels)
+            :telemetry.execute([:phoenix, :socket, :joined_channels], %{total: num_channels})
             {:reply, :ok, encode_reply(socket, reply), {state, socket}}
 
           {:error, reply} ->
