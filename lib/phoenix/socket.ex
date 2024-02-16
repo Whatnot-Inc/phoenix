@@ -676,7 +676,8 @@ defmodule Phoenix.Socket do
             state = put_channel(state, pid, topic, join_ref)
 
             num_channels = map_size(state.channels)
-            metadata = %{assigns: socket.assigns, topic: topic, operation: :join}
+            payload = Map.get(message, :payload, %{})
+            metadata = %{assigns: socket.assigns, topic: topic, operation: :join, payload: payload}
             :telemetry.execute([:phoenix, :socket, :joined_channels], %{total: num_channels}, metadata)
             {:reply, :ok, encode_reply(socket, reply), {state, socket}}
 
@@ -724,9 +725,12 @@ defmodule Phoenix.Socket do
       # we need to match on nil to handle v1 protocol
       %{^pid => {^topic, existing_join_ref}} when existing_join_ref in [join_ref, nil] ->
         send(pid, msg)
-        metadata = %{assigns: socket.assigns, topic: topic, operation: :leave}
+
+        payload = Map.get(msg, :payload, %{})
+        metadata = %{assigns: socket.assigns, topic: topic, operation: :leave, payload: payload}
         state = update_channel_status(state, pid, topic, :leaving)
         num_channels = map_size(state.channels)
+
         :telemetry.execute([:phoenix, :socket, :joined_channels], %{total: num_channels}, metadata)
         {:ok, {state, socket}}
 
