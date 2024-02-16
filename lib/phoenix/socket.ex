@@ -676,7 +676,7 @@ defmodule Phoenix.Socket do
             state = put_channel(state, pid, topic, join_ref)
 
             num_channels = map_size(state.channels)
-            metadata = %{assigns: socket.assigns}
+            metadata = %{assigns: socket.assigns, topic: topic, operation: :join}
             :telemetry.execute([:phoenix, :socket, :joined_channels], %{total: num_channels}, metadata)
             {:reply, :ok, encode_reply(socket, reply), {state, socket}}
 
@@ -724,7 +724,11 @@ defmodule Phoenix.Socket do
       # we need to match on nil to handle v1 protocol
       %{^pid => {^topic, existing_join_ref}} when existing_join_ref in [join_ref, nil] ->
         send(pid, msg)
-        {:ok, {update_channel_status(state, pid, topic, :leaving), socket}}
+        metadata = %{assigns: socket.assigns, topic: topic, operation: :leave}
+        state = update_channel_status(state, pid, topic, :leaving)
+        num_channels = map_size(state.channels)
+        :telemetry.execute([:phoenix, :socket, :joined_channels], %{total: num_channels}, metadata)
+        {:ok, {state, socket}}
 
       # the client has raced a server close. No need to reply since we already sent close
       %{^pid => {^topic, _old_join_ref}} ->
