@@ -672,13 +672,10 @@ defmodule Phoenix.Socket do
               payload: reply
             }
 
-
             state = put_channel(state, pid, topic, join_ref)
-
-            num_channels = map_size(state.channels)
             payload = Map.get(message, :payload, %{})
             metadata = %{assigns: socket.assigns, topic: topic, operation: :join, payload: payload}
-            :telemetry.execute([:phoenix, :socket, :joined_channels], %{total: num_channels}, metadata)
+            :telemetry.execute([:phoenix, :socket, :joined_channels], %{total: joined_channels(state)}, metadata)
             {:reply, :ok, encode_reply(socket, reply), {state, socket}}
 
           {:error, reply} ->
@@ -729,9 +726,8 @@ defmodule Phoenix.Socket do
         payload = Map.get(msg, :payload, %{})
         metadata = %{assigns: socket.assigns, topic: topic, operation: :leave, payload: payload}
         state = update_channel_status(state, pid, topic, :leaving)
-        num_channels = map_size(state.channels)
 
-        :telemetry.execute([:phoenix, :socket, :joined_channels], %{total: num_channels}, metadata)
+        :telemetry.execute([:phoenix, :socket, :joined_channels], %{total: joined_channels(state)}, metadata)
         {:ok, {state, socket}}
 
       # the client has raced a server close. No need to reply since we already sent close
@@ -845,5 +841,12 @@ defmodule Phoenix.Socket do
   defp update_channel_status(state, pid, topic, status) do
     new_channels = Map.update!(state.channels, topic, fn {^pid, ref, _} -> {pid, ref, status} end)
     %{state | channels: new_channels}
+  end
+
+  defp joined_channels(state) do
+    Enum.reduce(state.channels, 0,
+      fn {_topic, {_, _, :joined}}, acc -> acc + 1
+        _, acc -> acc
+      end)
   end
 end
