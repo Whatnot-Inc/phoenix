@@ -289,9 +289,25 @@ defmodule Phoenix.Endpoint.EndpointTest do
     refute_receive {:telemetry, _, _, _}
 
     Endpoint.subscribe("atopic")
-    Endpoint.broadcast!("atopic", "event1", %{key: :val})
+    some = spawn fn -> :ok end
 
+    Endpoint.broadcast_from(some, "atopic", "event1", %{key: :val})
     assert_receive {:telemetry, _, %{subscribers: 1}, %{topic: "atopic", event: "event1", payload: %{key: :val}}}
+
+    Endpoint.broadcast_from!(some, "atopic", "event2", %{key: :val})
+    assert_receive {:telemetry, _, %{subscribers: 1}, %{topic: "atopic", event: "event2", payload: %{key: :val}}}
+
+    Endpoint.broadcast("atopic", "event3", %{key: :val})
+    assert_receive {:telemetry, _, %{subscribers: 1}, %{topic: "atopic", event: "event3", payload: %{key: :val}}}
+
+    Endpoint.broadcast!("atopic", "event4", %{key: :val})
+    assert_receive {:telemetry, _, %{subscribers: 1}, %{topic: "atopic", event: "event4", payload: %{key: :val}}}
+
+    Endpoint.local_broadcast_from(some, "atopic", "event5", %{key: :val})
+    assert_receive {:telemetry, _, %{subscribers: 1}, %{topic: "atopic", event: "event5", payload: %{key: :val}}}
+
+    Endpoint.local_broadcast("atopic", "event6", %{key: :val})
+    assert_receive {:telemetry, _, %{subscribers: 1}, %{topic: "atopic", event: "event6", payload: %{key: :val}}}
   end
 
   test "loads cache manifest from specified application" do
