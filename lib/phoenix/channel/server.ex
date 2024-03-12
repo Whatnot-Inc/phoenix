@@ -95,8 +95,8 @@ defmodule Phoenix.Channel.Server do
   def dispatch(subscribers, from, %Broadcast{event: event} = msg) do
     :telemetry.execute(
       [:phoenix, :endpoint, :broadcast],
-      %{subscribers: length(subscribers)},
-      %{message: Map.from_struct(msg)}
+      %{},
+      %{subscribers: subscribers, message: Map.from_struct(msg)}
     ) 
 
     Enum.reduce(subscribers, %{}, fn
