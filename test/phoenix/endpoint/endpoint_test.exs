@@ -272,6 +272,44 @@ defmodule Phoenix.Endpoint.EndpointTest do
       event: "event3", payload: %{key: :val}, topic: "sometopic"}
   end
 
+  test "emits telemetry event on pubsub broadcast", ctx do
+    me = self()
+
+    :telemetry.attach(
+      ctx.test,
+      [:phoenix, :endpoint, :broadcast],
+      fn event, measurements, metadata, _config ->
+        send(me, {:telemetry, event, measurements, metadata})
+      end,
+      nil
+    )
+
+    Endpoint.broadcast!("atopic", "event1", %{key: :val})
+
+    refute_receive {:telemetry, _, _, _}
+
+    Endpoint.subscribe("atopic")
+    some = spawn fn -> :ok end
+
+    Endpoint.broadcast_from(some, "atopic", "event1", %{key: :val})
+    assert_receive {:telemetry, _, %{}, %{subscribers: [{^me, nil}], message: %{topic: "atopic", event: "event1", payload: %{key: :val}}}}
+
+    Endpoint.broadcast_from!(some, "atopic", "event2", %{key: :val})
+    assert_receive {:telemetry, _, %{}, %{subscribers: [{^me, nil}], message: %{topic: "atopic", event: "event2", payload: %{key: :val}}}}
+
+    Endpoint.broadcast("atopic", "event3", %{key: :val})
+    assert_receive {:telemetry, _, %{}, %{subscribers: [{^me, nil}], message: %{topic: "atopic", event: "event3", payload: %{key: :val}}}}
+
+    Endpoint.broadcast!("atopic", "event4", %{key: :val})
+    assert_receive {:telemetry, _, %{}, %{subscribers: [{^me, nil}], message: %{topic: "atopic", event: "event4", payload: %{key: :val}}}}
+
+    Endpoint.local_broadcast_from(some, "atopic", "event5", %{key: :val})
+    assert_receive {:telemetry, _, %{}, %{subscribers: [{^me, nil}], message: %{topic: "atopic", event: "event5", payload: %{key: :val}}}}
+
+    Endpoint.local_broadcast("atopic", "event6", %{key: :val})
+    assert_receive {:telemetry, _, %{}, %{subscribers: [{^me, nil}], message: %{topic: "atopic", event: "event6", payload: %{key: :val}}}}
+  end
+
   test "loads cache manifest from specified application" do
     config = put_in(@config[:cache_static_manifest], {:phoenix, "../../../../test/fixtures/digest/compile/cache_manifest.json"})
 

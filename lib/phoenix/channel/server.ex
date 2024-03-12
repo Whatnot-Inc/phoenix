@@ -18,9 +18,17 @@ defmodule Phoenix.Channel.Server do
   def join(socket, channel, message, opts) do
     %{topic: topic, payload: payload, ref: ref, join_ref: join_ref} = message
 
-    starter = opts[:starter] || &PoolSupervisor.start_child/3
+    starter = opts[:starter] || (&PoolSupervisor.start_child/3)
     assigns = Map.merge(socket.assigns, Keyword.get(opts, :assigns, %{}))
-    socket = %{socket | topic: topic, channel: channel, join_ref: join_ref || ref, assigns: assigns}
+
+    socket = %{
+      socket
+      | topic: topic,
+        channel: channel,
+        join_ref: join_ref || ref,
+        assigns: assigns
+    }
+
     ref = make_ref()
     from = {self(), ref}
     child_spec = channel.child_spec({socket.endpoint, from})
@@ -85,6 +93,12 @@ defmodule Phoenix.Channel.Server do
   Hook invoked by Phoenix.PubSub dispatch.
   """
   def dispatch(subscribers, from, %Broadcast{event: event} = msg) do
+    :telemetry.execute(
+      [:phoenix, :endpoint, :broadcast],
+      %{},
+      %{subscribers: subscribers, message: Map.from_struct(msg)}
+    ) 
+
     Enum.reduce(subscribers, %{}, fn
       {pid, _}, cache when pid == from ->
         cache
