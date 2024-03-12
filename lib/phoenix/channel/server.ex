@@ -96,7 +96,7 @@ defmodule Phoenix.Channel.Server do
     :telemetry.execute(
       [:phoenix, :endpoint, :broadcast],
       %{subscribers: length(subscribers)},
-      Map.from_struct(msg)
+      %{message: Map.from_struct(msg)}
     ) 
 
     Enum.reduce(subscribers, %{}, fn
