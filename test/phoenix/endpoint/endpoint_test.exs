@@ -272,6 +272,46 @@ defmodule Phoenix.Endpoint.EndpointTest do
       event: "event3", payload: %{key: :val}, topic: "sometopic"}
   end
 
+  test "custom dispatch module can be passed to all broadcast functions" do
+    topic = "sometopic"
+    some = spawn fn -> :ok end
+    Endpoint.subscribe(topic)
+
+    defmodule CustomDispatch do
+      def dispatch(subscribers, _from, %Phoenix.Socket.Broadcast{payload: payload}=msg) do
+        payload = Map.update(payload, :key, 1, & &1*2)
+        msg = %Phoenix.Socket.Broadcast{msg | payload: payload}
+        for {pid, _} <- subscribers do
+          send(pid, msg)
+        end
+      end
+    end
+
+    Endpoint.broadcast(topic, "event1", %{key: 1}, CustomDispatch)
+    assert_receive %Phoenix.Socket.Broadcast{
+      event: "event1", payload: %{key: 2}, topic: ^topic}
+
+    Endpoint.broadcast!(topic, "event2", %{key: 2}, CustomDispatch)
+    assert_receive %Phoenix.Socket.Broadcast{
+      event: "event2", payload: %{key: 4}, topic: ^topic}
+
+    Endpoint.broadcast_from(some, topic, "event3", %{key: 3}, CustomDispatch)
+    assert_receive %Phoenix.Socket.Broadcast{
+      event: "event3", payload: %{key: 6}, topic: ^topic}
+
+    Endpoint.broadcast_from!(some, topic, "event4", %{key: 4}, CustomDispatch)
+    assert_receive %Phoenix.Socket.Broadcast{
+      event: "event4", payload: %{key: 8}, topic: ^topic}
+
+    Endpoint.local_broadcast(topic, "event5", %{key: 5}, CustomDispatch)
+    assert_receive %Phoenix.Socket.Broadcast{
+      event: "event5", payload: %{key: 10}, topic: ^topic}
+
+    Endpoint.local_broadcast_from(some, topic, "event6", %{key: 6}, CustomDispatch)
+    assert_receive %Phoenix.Socket.Broadcast{
+      event: "event6", payload: %{key: 12}, topic: ^topic}
+  end
+
   test "emits telemetry event on pubsub broadcast", ctx do
     me = self()
 

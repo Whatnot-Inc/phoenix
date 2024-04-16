@@ -150,7 +150,7 @@ defmodule Phoenix.Channel.Server do
 
   The message is encoded as `Phoenix.Socket.Broadcast`.
   """
-  def broadcast(pubsub_server, topic, event, payload)
+  def broadcast(pubsub_server, topic, event, payload, dispatch \\ __MODULE__)
       when is_binary(topic) and is_binary(event) do
     broadcast = %Broadcast{
       topic: topic,
@@ -158,7 +158,7 @@ defmodule Phoenix.Channel.Server do
       payload: payload
     }
 
-    PubSub.broadcast(pubsub_server, topic, broadcast, __MODULE__)
+    PubSub.broadcast(pubsub_server, topic, broadcast, dispatch)
   end
 
   @doc """
@@ -167,7 +167,7 @@ defmodule Phoenix.Channel.Server do
 
   Raises in case of crashes.
   """
-  def broadcast!(pubsub_server, topic, event, payload)
+  def broadcast!(pubsub_server, topic, event, payload, dispatch \\ __MODULE__)
       when is_binary(topic) and is_binary(event) do
     broadcast = %Broadcast{
       topic: topic,
@@ -175,7 +175,7 @@ defmodule Phoenix.Channel.Server do
       payload: payload
     }
 
-    PubSub.broadcast!(pubsub_server, topic, broadcast, __MODULE__)
+    PubSub.broadcast!(pubsub_server, topic, broadcast, dispatch)
   end
 
   @doc """
@@ -184,7 +184,7 @@ defmodule Phoenix.Channel.Server do
 
   The message is encoded as `Phoenix.Socket.Broadcast`.
   """
-  def broadcast_from(pubsub_server, from, topic, event, payload)
+  def broadcast_from(pubsub_server, from, topic, event, payload, dispatch \\ __MODULE__)
       when is_binary(topic) and is_binary(event) do
     broadcast = %Broadcast{
       topic: topic,
@@ -192,7 +192,7 @@ defmodule Phoenix.Channel.Server do
       payload: payload
     }
 
-    PubSub.broadcast_from(pubsub_server, from, topic, broadcast, __MODULE__)
+    PubSub.broadcast_from(pubsub_server, from, topic, broadcast, dispatch)
   end
 
   @doc """
@@ -201,7 +201,7 @@ defmodule Phoenix.Channel.Server do
 
   Raises in case of crashes.
   """
-  def broadcast_from!(pubsub_server, from, topic, event, payload)
+  def broadcast_from!(pubsub_server, from, topic, event, payload, dispatch \\ __MODULE__)
       when is_binary(topic) and is_binary(event) do
     broadcast = %Broadcast{
       topic: topic,
@@ -209,7 +209,7 @@ defmodule Phoenix.Channel.Server do
       payload: payload
     }
 
-    PubSub.broadcast_from!(pubsub_server, from, topic, broadcast, __MODULE__)
+    PubSub.broadcast_from!(pubsub_server, from, topic, broadcast, dispatch)
   end
 
   @doc """
@@ -218,7 +218,7 @@ defmodule Phoenix.Channel.Server do
 
   The message is encoded as `Phoenix.Socket.Broadcast`.
   """
-  def local_broadcast(pubsub_server, topic, event, payload)
+  def local_broadcast(pubsub_server, topic, event, payload, dispatch \\ __MODULE__)
       when is_binary(topic) and is_binary(event) do
     broadcast = %Broadcast{
       topic: topic,
@@ -226,7 +226,7 @@ defmodule Phoenix.Channel.Server do
       payload: payload
     }
 
-    PubSub.local_broadcast(pubsub_server, topic, broadcast, __MODULE__)
+    PubSub.local_broadcast(pubsub_server, topic, broadcast, dispatch)
   end
 
   @doc """
@@ -235,7 +235,7 @@ defmodule Phoenix.Channel.Server do
 
   The message is encoded as `Phoenix.Socket.Broadcast`.
   """
-  def local_broadcast_from(pubsub_server, from, topic, event, payload)
+  def local_broadcast_from(pubsub_server, from, topic, event, payload, dispatch \\ __MODULE__)
       when is_binary(topic) and is_binary(event) do
     broadcast = %Broadcast{
       topic: topic,
@@ -243,7 +243,7 @@ defmodule Phoenix.Channel.Server do
       payload: payload
     }
 
-    PubSub.local_broadcast_from(pubsub_server, from, topic, broadcast, __MODULE__)
+    PubSub.local_broadcast_from(pubsub_server, from, topic, broadcast, dispatch)
   end
 
   @doc """

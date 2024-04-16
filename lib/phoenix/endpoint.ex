@@ -442,28 +442,30 @@ defmodule Phoenix.Endpoint do
         Phoenix.PubSub.unsubscribe(pubsub_server!(), topic)
       end
 
-      def broadcast_from(from, topic, event, msg) do
-        Phoenix.Channel.Server.broadcast_from(pubsub_server!(), from, topic, event, msg)
+      @default_dispatch Phoenix.Channel.Server
+
+      def broadcast_from(from, topic, event, msg, dispatch \\ @default_dispatch) do
+        Phoenix.Channel.Server.broadcast_from(pubsub_server!(), from, topic, event, msg, dispatch)
       end
 
-      def broadcast_from!(from, topic, event, msg) do
-        Phoenix.Channel.Server.broadcast_from!(pubsub_server!(), from, topic, event, msg)
+      def broadcast_from!(from, topic, event, msg, dispatch \\ @default_dispatch) do
+        Phoenix.Channel.Server.broadcast_from!(pubsub_server!(), from, topic, event, msg, dispatch)
       end
 
-      def broadcast(topic, event, msg) do
-        Phoenix.Channel.Server.broadcast(pubsub_server!(), topic, event, msg)
+      def broadcast(topic, event, msg, dispatch \\ @default_dispatch) do
+        Phoenix.Channel.Server.broadcast(pubsub_server!(), topic, event, msg, dispatch)
       end
 
-      def broadcast!(topic, event, msg) do
-        Phoenix.Channel.Server.broadcast!(pubsub_server!(), topic, event, msg)
+      def broadcast!(topic, event, msg, dispatch \\ @default_dispatch) do
+        Phoenix.Channel.Server.broadcast!(pubsub_server!(), topic, event, msg, dispatch)
       end
 
-      def local_broadcast(topic, event, msg) do
-        Phoenix.Channel.Server.local_broadcast(pubsub_server!(), topic, event, msg)
+      def local_broadcast(topic, event, msg, dispatch \\ @default_dispatch) do
+        Phoenix.Channel.Server.local_broadcast(pubsub_server!(), topic, event, msg, dispatch)
       end
 
-      def local_broadcast_from(from, topic, event, msg) do
-        Phoenix.Channel.Server.local_broadcast_from(pubsub_server!(), from, topic, event, msg)
+      def local_broadcast_from(from, topic, event, msg, dispatch \\ @default_dispatch) do
+        Phoenix.Channel.Server.local_broadcast_from(pubsub_server!(), from, topic, event, msg, dispatch)
       end
 
       defp pubsub_server! do
