@@ -103,8 +103,7 @@ defmodule Phoenix.Channel.Server do
       {pid, _}, cache when pid == from ->
         cache
 
-      {pid, {:fastlane, socket, event_intercepts}}, cache ->
-        %{transport_pid: fastlane_pid, serializer: serializer} = socket
+      {pid, {:fastlane, fastlane_pid, serializer, event_intercepts, _assigns}}, cache ->
         if event in event_intercepts do
           send(pid, msg)
           cache
@@ -427,7 +426,7 @@ defmodule Phoenix.Channel.Server do
   end
 
   defp init_join(socket, channel, topic) do
-    %{transport_pid: transport_pid, pubsub_server: pubsub_server} = socket
+    %{transport_pid: transport_pid, serializer: serializer, assigns: assigns, pubsub_server: pubsub_server} = socket
 
     unless pubsub_server do
       raise """
@@ -445,7 +444,7 @@ defmodule Phoenix.Channel.Server do
     end
 
     Process.monitor(transport_pid)
-    fastlane = {:fastlane, socket, channel.__intercepts__()}
+    fastlane = {:fastlane, transport_pid, serializer, channel.__intercepts__(), assigns}
     PubSub.subscribe(pubsub_server, topic, metadata: fastlane)
 
     {:noreply, %{socket | joined: true}}
