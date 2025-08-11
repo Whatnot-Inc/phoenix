@@ -40,7 +40,7 @@ defmodule Phoenix.Endpoint.EndpointTest do
 
   setup_all do
     ExUnit.CaptureLog.capture_log(fn -> start_supervised! Endpoint end)
-    start_supervised! {Phoenix.PubSub, name: :endpoint_pub}
+    start_supervised! {Phoenix.PubSub, name: :endpoint_pub, pool_size: 1}
     on_exit fn -> Application.delete_env(:phoenix, :serve_endpoints) end
     :ok
   end
@@ -284,30 +284,57 @@ defmodule Phoenix.Endpoint.EndpointTest do
       nil
     )
 
-    Endpoint.broadcast!("atopic", "event1", %{key: :val})
-
-    refute_receive {:telemetry, _, _, _}
-
     Endpoint.subscribe("atopic")
     some = spawn fn -> :ok end
 
     Endpoint.broadcast_from(some, "atopic", "event1", %{key: :val})
-    assert_receive {:telemetry, _, %{}, %{subscribers: [{^me, nil}], message: %{topic: "atopic", event: "event1", payload: %{key: :val}}}}
+    assert_receive {:telemetry, _, %{}, %{subscriber_count: 1, message: %{topic: "atopic", event: "event1", payload: %{key: :val}}}}
 
     Endpoint.broadcast_from!(some, "atopic", "event2", %{key: :val})
-    assert_receive {:telemetry, _, %{}, %{subscribers: [{^me, nil}], message: %{topic: "atopic", event: "event2", payload: %{key: :val}}}}
+    assert_receive {:telemetry, _, %{}, %{subscriber_count: 1, message: %{topic: "atopic", event: "event2", payload: %{key: :val}}}}
 
     Endpoint.broadcast("atopic", "event3", %{key: :val})
-    assert_receive {:telemetry, _, %{}, %{subscribers: [{^me, nil}], message: %{topic: "atopic", event: "event3", payload: %{key: :val}}}}
+    assert_receive {:telemetry, _, %{}, %{subscriber_count: 1, message: %{topic: "atopic", event: "event3", payload: %{key: :val}}}}
 
     Endpoint.broadcast!("atopic", "event4", %{key: :val})
-    assert_receive {:telemetry, _, %{}, %{subscribers: [{^me, nil}], message: %{topic: "atopic", event: "event4", payload: %{key: :val}}}}
+    assert_receive {:telemetry, _, %{}, %{subscriber_count: 1, message: %{topic: "atopic", event: "event4", payload: %{key: :val}}}}
 
     Endpoint.local_broadcast_from(some, "atopic", "event5", %{key: :val})
-    assert_receive {:telemetry, _, %{}, %{subscribers: [{^me, nil}], message: %{topic: "atopic", event: "event5", payload: %{key: :val}}}}
+    assert_receive {:telemetry, _, %{}, %{subscriber_count: 1, message: %{topic: "atopic", event: "event5", payload: %{key: :val}}}}
 
     Endpoint.local_broadcast("atopic", "event6", %{key: :val})
-    assert_receive {:telemetry, _, %{}, %{subscribers: [{^me, nil}], message: %{topic: "atopic", event: "event6", payload: %{key: :val}}}}
+    assert_receive {:telemetry, _, %{}, %{subscriber_count: 1, message: %{topic: "atopic", event: "event6", payload: %{key: :val}}}}
+
+    Endpoint.unsubscribe("atopic")
+    Endpoint.broadcast("atopic", "event7", %{key: :val})
+    refute_receive {:telemetry, _, _, _}
+  end
+
+  test "emits telemetry event on pubsub broadcast with multiple subscribers", ctx do
+    me = self()
+    :telemetry.attach(
+      ctx.test,
+      [:phoenix, :endpoint, :broadcast],
+      fn event, measurements, metadata, _config ->
+        send(me, {:telemetry, event, measurements, metadata})
+      end,
+      nil
+    )
+
+    Endpoint.subscribe("atopic")
+    spawn fn ->
+      Endpoint.subscribe("atopic")
+      send(me, :subscribed)
+
+      Process.sleep(5000)
+      :ok
+    end
+
+    # makes sure that subscription in spawned process happens before broadcast
+    assert_receive :subscribed
+
+    Endpoint.broadcast("atopic", "event1", %{key: :val})
+    assert_receive {:telemetry, _, %{}, %{subscriber_count: 2, message: %{topic: "atopic", event: "event1", payload: %{key: :val}}}}
   end
 
   test "loads cache manifest from specified application" do

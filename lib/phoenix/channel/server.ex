@@ -93,37 +93,37 @@ defmodule Phoenix.Channel.Server do
   Hook invoked by Phoenix.PubSub dispatch.
   """
   def dispatch(subscribers, from, %Broadcast{event: event} = msg) do
-    :telemetry.execute(
-      [:phoenix, :endpoint, :broadcast],
-      %{},
-      %{subscribers: subscribers, message: Map.from_struct(msg)}
-    ) 
+    {_cache, subscriber_count} = Enum.reduce(subscribers, {%{}, 0}, fn
+      {pid, _}, {cache, count} when pid == from ->
+        {cache, count}
 
-    Enum.reduce(subscribers, %{}, fn
-      {pid, _}, cache when pid == from ->
-        cache
-
-      {pid, {:fastlane, fastlane_pid, serializer, event_intercepts}}, cache ->
+      {pid, {:fastlane, fastlane_pid, serializer, event_intercepts}}, {cache, count} ->
         if event in event_intercepts do
           send(pid, msg)
-          cache
+          {cache, count + 1}
         else
           case cache do
             %{^serializer => encoded_msg} ->
               send(fastlane_pid, encoded_msg)
-              cache
+              {cache, count + 1}
 
             %{} ->
               encoded_msg = serializer.fastlane!(msg)
               send(fastlane_pid, encoded_msg)
-              Map.put(cache, serializer, encoded_msg)
+              {Map.put(cache, serializer, encoded_msg), count + 1}
           end
         end
 
-      {pid, _}, cache ->
+      {pid, _}, {cache, count} ->
         send(pid, msg)
-        cache
+        {cache, count + 1}
     end)
+
+    :telemetry.execute(
+      [:phoenix, :endpoint, :broadcast],
+      %{},
+      %{subscriber_count: subscriber_count, message: Map.from_struct(msg)}
+    )
 
     :ok
   end
