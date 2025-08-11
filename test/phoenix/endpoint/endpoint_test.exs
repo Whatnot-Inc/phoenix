@@ -284,10 +284,6 @@ defmodule Phoenix.Endpoint.EndpointTest do
       nil
     )
 
-    Endpoint.broadcast!("atopic", "event1", %{key: :val})
-
-    refute_receive {:telemetry, _, _, _}
-
     Endpoint.subscribe("atopic")
     some = spawn fn -> :ok end
 
@@ -308,6 +304,10 @@ defmodule Phoenix.Endpoint.EndpointTest do
 
     Endpoint.local_broadcast("atopic", "event6", %{key: :val})
     assert_receive {:telemetry, _, %{}, %{subscriber_count: 1, message: %{topic: "atopic", event: "event6", payload: %{key: :val}}}}
+
+    Endpoint.unsubscribe("atopic")
+    Endpoint.broadcast("atopic", "event7", %{key: :val})
+    refute_receive {:telemetry, _, _, _}
   end
 
   test "emits telemetry event on pubsub broadcast with multiple subscribers", ctx do
