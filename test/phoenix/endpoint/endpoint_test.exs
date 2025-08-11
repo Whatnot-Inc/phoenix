@@ -40,7 +40,7 @@ defmodule Phoenix.Endpoint.EndpointTest do
 
   setup_all do
     ExUnit.CaptureLog.capture_log(fn -> start_supervised! Endpoint end)
-    start_supervised! {Phoenix.PubSub, name: :endpoint_pub}
+    start_supervised! {Phoenix.PubSub, name: :endpoint_pub, pool_size: 1}
     on_exit fn -> Application.delete_env(:phoenix, :serve_endpoints) end
     :ok
   end
@@ -311,6 +311,9 @@ defmodule Phoenix.Endpoint.EndpointTest do
   end
 
   test "emits telemetry event on pubsub broadcast with multiple subscribers", ctx do
+    # reset config
+    Application.put_env(:phoenix, __MODULE__.Endpoint, @config)
+
     me = self()
     :telemetry.attach(
       ctx.test,
@@ -321,12 +324,13 @@ defmodule Phoenix.Endpoint.EndpointTest do
       nil
     )
 
-    Endpoint.subscribe("atopic")
-    spawn fn ->
-      Endpoint.subscribe("atopic")
-      Process.sleep(5000)
-      :ok
-    end
+    Enum.each(1..2, fn _ ->
+      spawn fn ->
+        Endpoint.subscribe("atopic")
+        Process.sleep(5000)
+        :ok
+      end
+    end)
 
     Endpoint.broadcast("atopic", "event1", %{key: :val})
     assert_receive {:telemetry, _, %{}, %{subscriber_count: 2, message: %{topic: "atopic", event: "event1", payload: %{key: :val}}}}
