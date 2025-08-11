@@ -324,16 +324,17 @@ defmodule Phoenix.Endpoint.EndpointTest do
       nil
     )
 
+    Endpoint.subscribe("multi_topic")
     Enum.each(1..2, fn _ ->
       spawn fn ->
-        Endpoint.subscribe("atopic")
+        Endpoint.subscribe("multi_topic")
         Process.sleep(5000)
         :ok
       end
     end)
 
-    Endpoint.broadcast("atopic", "event1", %{key: :val})
-    assert_receive {:telemetry, _, %{}, %{subscriber_count: 2, message: %{topic: "atopic", event: "event1", payload: %{key: :val}}}}
+    Endpoint.broadcast("multi_topic", "event1", %{key: :val})
+    assert_receive {:telemetry, _, %{}, %{subscriber_count: 3, message: %{topic: "multi_topic", event: "event1", payload: %{key: :val}}}}
   end
 
   test "loads cache manifest from specified application" do
