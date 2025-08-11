@@ -311,9 +311,6 @@ defmodule Phoenix.Endpoint.EndpointTest do
   end
 
   test "emits telemetry event on pubsub broadcast with multiple subscribers", ctx do
-    # reset config
-    Application.put_env(:phoenix, __MODULE__.Endpoint, @config)
-
     me = self()
     :telemetry.attach(
       ctx.test,
@@ -324,17 +321,20 @@ defmodule Phoenix.Endpoint.EndpointTest do
       nil
     )
 
-    Endpoint.subscribe("multi_topic")
-    Enum.each(1..2, fn _ ->
-      spawn fn ->
-        Endpoint.subscribe("multi_topic")
-        Process.sleep(5000)
-        :ok
-      end
-    end)
+    Endpoint.subscribe("atopic")
+    spawn fn ->
+      Endpoint.subscribe("atopic")
+      send(me, :subscribed)
 
-    Endpoint.broadcast("multi_topic", "event1", %{key: :val})
-    assert_receive {:telemetry, _, %{}, %{subscriber_count: 3, message: %{topic: "multi_topic", event: "event1", payload: %{key: :val}}}}
+      Process.sleep(5000)
+      :ok
+    end
+
+    # makes sure that subscription in spawned process happens before broadcast
+    assert_receive :subscribed
+
+    Endpoint.broadcast("atopic", "event1", %{key: :val})
+    assert_receive {:telemetry, _, %{}, %{subscriber_count: 2, message: %{topic: "atopic", event: "event1", payload: %{key: :val}}}}
   end
 
   test "loads cache manifest from specified application" do
