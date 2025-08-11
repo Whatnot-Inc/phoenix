@@ -310,6 +310,28 @@ defmodule Phoenix.Endpoint.EndpointTest do
     assert_receive {:telemetry, _, %{}, %{subscriber_count: 1, message: %{topic: "atopic", event: "event6", payload: %{key: :val}}}}
   end
 
+  test "emits telemetry event on pubsub broadcast with multiple subscribers", ctx do
+    me = self()
+    :telemetry.attach(
+      ctx.test,
+      [:phoenix, :endpoint, :broadcast],
+      fn event, measurements, metadata, _config ->
+        send(me, {:telemetry, event, measurements, metadata})
+      end,
+      nil
+    )
+
+    Endpoint.subscribe("atopic")
+    spawn fn ->
+      Endpoint.subscribe("atopic")
+      Process.sleep(5000)
+      :ok
+    end
+
+    Endpoint.broadcast("atopic", "event1", %{key: :val})
+    assert_receive {:telemetry, _, %{}, %{subscriber_count: 2, message: %{topic: "atopic", event: "event1", payload: %{key: :val}}}}
+  end
+
   test "loads cache manifest from specified application" do
     config = put_in(@config[:cache_static_manifest], {:phoenix, "../../../../test/fixtures/digest/compile/cache_manifest.json"})
 
