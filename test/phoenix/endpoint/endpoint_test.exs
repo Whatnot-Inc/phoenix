@@ -322,7 +322,7 @@ defmodule Phoenix.Endpoint.EndpointTest do
     )
 
     Endpoint.subscribe("anothertopic")
-    pid = spawn fn ->
+    spawn fn ->
       Endpoint.subscribe("anothertopic")
       send(me, :subscribed)
 
