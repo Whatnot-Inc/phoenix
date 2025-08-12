@@ -122,7 +122,7 @@ defmodule Phoenix.Channel.Server do
     :telemetry.execute(
       [:phoenix, :endpoint, :broadcast],
       %{subscriber_count: subscriber_count},
-      %{message: Map.from_struct(msg)}
+      %{subscribers: subscribers, message: Map.from_struct(msg)}
     )
 
     :ok
