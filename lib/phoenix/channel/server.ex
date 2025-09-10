@@ -97,8 +97,14 @@ defmodule Phoenix.Channel.Server do
       {pid, _}, {cache, count} when pid == from ->
         {cache, count}
 
-      {pid, {:fastlane, fastlane_pid, serializer, event_intercepts}}, {cache, count} ->
-        if event in event_intercepts do
+      {pid, {:fastlane, fastlane_pid, serializer, socket, event_intercepts}}, {cache, count} ->
+        intercept? = case Map.get(event_intercepts, event) do
+          true -> true
+          predicate when is_function(predicate, 1) -> predicate.(socket)
+          _ -> false
+        end
+
+        if intercept? do
           send(pid, msg)
           {cache, count + 1}
         else
@@ -444,7 +450,7 @@ defmodule Phoenix.Channel.Server do
     end
 
     Process.monitor(transport_pid)
-    fastlane = {:fastlane, transport_pid, serializer, channel.__intercepts__()}
+    fastlane = {:fastlane, transport_pid, serializer, socket, channel.__intercepts__()}
     PubSub.subscribe(pubsub_server, topic, metadata: fastlane)
 
     {:noreply, %{socket | joined: true}}
