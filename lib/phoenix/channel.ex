@@ -464,7 +464,7 @@ defmodule Phoenix.Channel do
       @behaviour unquote(__MODULE__)
       @on_definition unquote(__MODULE__)
       @before_compile unquote(__MODULE__)
-      @phoenix_intercepts {}
+      @phoenix_intercepts %{}
       @phoenix_log_join Keyword.get(opts, :log_join, :info)
       @phoenix_log_handle_in Keyword.get(opts, :log_handle_in, :debug)
       @phoenix_hibernate_after Keyword.get(opts, :hibernate_after, 15_000)
