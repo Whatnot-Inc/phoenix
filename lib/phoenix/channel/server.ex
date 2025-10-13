@@ -19,6 +19,7 @@ defmodule Phoenix.Channel.Server do
     %{topic: topic, payload: payload, ref: ref, join_ref: join_ref} = message
 
     starter = opts[:starter] || (&PoolSupervisor.start_child/3)
+    starter_error_handler = opts[:starter_error_handler] || (&starter_error_handler/1)
     assigns = Map.merge(socket.assigns, Keyword.get(opts, :assigns, %{}))
 
     socket = %{
@@ -53,9 +54,13 @@ defmodule Phoenix.Channel.Server do
         end
 
       {:error, reason} ->
-        Logger.error(fn -> Exception.format_exit(reason) end)
-        {:error, %{reason: "join crashed"}}
+        starter_error_handler.(reason)
     end
+  end
+
+  defp starter_error_handler(reason) do
+    Logger.error(fn -> Exception.format_exit(reason) end)
+    {:error, %{reason: "join crashed"}}
   end
 
   @doc """
