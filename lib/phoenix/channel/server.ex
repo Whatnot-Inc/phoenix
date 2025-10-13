@@ -34,7 +34,7 @@ defmodule Phoenix.Channel.Server do
     child_spec = channel.child_spec({socket.endpoint, from})
 
     case starter.(socket, from, child_spec) do
-      {:ok, pid} ->
+      {:ok, pid, socket} ->
         send(pid, {Phoenix.Channel, payload, from, socket})
         mon_ref = Process.monitor(pid)
 

@@ -444,8 +444,9 @@ defmodule Phoenix.ChannelTest do
     %Socket{transport: {__MODULE__, sup}} = socket
 
     starter =
-      fn _, _, spec ->
-        Supervisor.start_child(sup, %{spec | id: make_ref()})
+      fn socket, _, spec ->
+        {:ok, pid} = Supervisor.start_child(sup, %{spec | id: make_ref()})
+        {:ok, pid, socket}
       end
 
     case Server.join(socket, channel, message, [starter: starter] ++ opts) do

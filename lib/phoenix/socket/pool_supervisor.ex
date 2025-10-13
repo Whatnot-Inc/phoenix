@@ -17,7 +17,12 @@ defmodule Phoenix.Socket.PoolSupervisor do
       ets when not is_nil(ets) ->
         partitions = :ets.lookup_element(ets, :partitions, 2)
         sup = :ets.lookup_element(ets, :erlang.phash2(key, partitions), 2)
-        DynamicSupervisor.start_child(sup, spec)
+        case DynamicSupervisor.start_child(sup, spec) do
+          {:ok, pid} ->
+            {:ok, pid, socket}
+          other ->
+            other
+        end
 
       nil ->
         raise ArgumentError, """
