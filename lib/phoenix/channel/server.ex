@@ -18,7 +18,7 @@ defmodule Phoenix.Channel.Server do
   def join(socket, channel, message, opts) do
     %{topic: topic, payload: payload, ref: ref, join_ref: join_ref} = message
 
-    starter = opts[:starter] || (&PoolSupervisor.start_child/3)
+    starter = opts[:starter] || (&PoolSupervisor.start_child/4)
     starter_error_handler = opts[:starter_error_handler] || (&starter_error_handler/1)
     assigns = Map.merge(socket.assigns, Keyword.get(opts, :assigns, %{}))
 
@@ -34,7 +34,7 @@ defmodule Phoenix.Channel.Server do
     from = {self(), ref}
     child_spec = channel.child_spec({socket.endpoint, from})
 
-    case starter.(socket, from, child_spec) do
+    case starter.(socket, payload, from, child_spec) do
       {:ok, pid, socket} ->
         send(pid, {Phoenix.Channel, payload, from, socket})
         mon_ref = Process.monitor(pid)

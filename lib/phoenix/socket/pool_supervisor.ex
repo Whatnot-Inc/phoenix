@@ -10,7 +10,7 @@ defmodule Phoenix.Socket.PoolSupervisor do
     )
   end
 
-  def start_child(socket, key, spec) do
+  def start_child(socket, _payload, key, spec) do
     %{endpoint: endpoint, handler: name} = socket
 
     case endpoint.config({:socket, name}) do
