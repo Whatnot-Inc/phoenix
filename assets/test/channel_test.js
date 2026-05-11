@@ -967,6 +967,7 @@ describe("with transport", function (){
 
   describe("leave", function (){
     let socketSpy
+    const chanParams = {one: "two"}
 
     beforeEach(function (){
       jest.useFakeTimers()
@@ -975,7 +976,7 @@ describe("with transport", function (){
       jest.spyOn(socket, "isConnected").mockReturnValue(true)
       socketSpy = jest.spyOn(socket, "push").mockReturnValue(undefined)
 
-      channel = socket.channel("topic", {one: "two"})
+      channel = socket.channel("topic", chanParams)
       channel.join().trigger("ok", {})
     })
 
@@ -992,7 +993,7 @@ describe("with transport", function (){
       expect(socketSpy).toHaveBeenCalledWith({
         topic: "topic",
         event: "phx_leave",
-        payload: {},
+        payload: chanParams,
         ref: defaultRef,
         join_ref: joinRef,
       })
