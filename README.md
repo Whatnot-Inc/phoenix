@@ -1,3 +1,24 @@
+## Whatnot's fork of phoenix -- used for Live Service and Web JS package
+
+### ADD / UPDATE TESTS FOR YOUR CHANGES
+- See `assets/js/test`
+- run with `npm test`
+
+### Environment
+Suggested versions for local development
+use `nvm` to manage
+- `node 18.19.0`
+- `npm 10.2.3`
+
+### Build changes from assets/js -> minified js (priv/static)
+This is done automatically by CI on `main` and `v*.*` branches by the Assets action. To build locally:
+- Have erlang and elixir installed: `brew install erlang`, `brew install elixir` if needed
+- `mix deps.get`
+- `mix assets.build`
+- changes made in assets/js should now be reflected in minified js
+
+-----
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="./priv/static/phoenix-orange.png" />
   <source media="(prefers-color-scheme: light)" srcset="./priv/static/phoenix.png" />
