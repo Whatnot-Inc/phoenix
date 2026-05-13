@@ -725,7 +725,8 @@ defmodule Phoenix.Endpoint do
             :fullsweep_after,
             :compress,
             :subprotocols,
-            :error_handler
+            :error_handler,
+            :deflate_options
           ]
       )
 
