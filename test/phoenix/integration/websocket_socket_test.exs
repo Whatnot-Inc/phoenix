@@ -105,9 +105,15 @@ defmodule Phoenix.Integration.WebSocketTest do
       websocket: [path: "/", timeout: {Endpoint, :websocket_timeout, []}],
       custom: :value
 
+    socket "/custom/upgrade_options", UserSocket,
+      websocket: [path: "/", timeout: 60_000, upgrade_options: {Endpoint, :upgrade_options, []}],
+      custom: :value
+
     socket "/ws/ping", PingSocket, websocket: true
 
     def websocket_timeout, do: 50
+
+    def upgrade_options, do: [timeout: 50]
   end
 
   setup %{adapter: adapter} do
@@ -195,6 +201,16 @@ defmodule Phoenix.Integration.WebSocketTest do
 
       test "allows a websocket timeout to be provided via MFA" do
         path = "ws://127.0.0.1:#{@port}/custom/timeout/"
+        {:ok, client} = WebsocketClient.connect(self(), path, :noop)
+        WebsocketClient.send(client, {:text, "ping"})
+        assert_receive {:text, "pong"}
+
+        Process.sleep(100)
+        refute Process.alive?(client)
+      end
+
+      test "allows per-connection upgrade options to be provided via MFA" do
+        path = "ws://127.0.0.1:#{@port}/custom/upgrade_options/"
         {:ok, client} = WebsocketClient.connect(self(), path, :noop)
         WebsocketClient.send(client, {:text, "ping"})
         assert_receive {:text, "pong"}
