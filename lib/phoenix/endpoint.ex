@@ -726,7 +726,8 @@ defmodule Phoenix.Endpoint do
             :compress,
             :subprotocols,
             :error_handler,
-            :deflate_options
+            :deflate_options,
+            :upgrade_options
           ]
       )
 

@@ -69,6 +69,12 @@ defmodule Phoenix.Transports.WebSocket do
             _ -> opts
           end
 
+        opts =
+          case Keyword.get(opts, :upgrade_options) do
+            {m, f, a} -> Keyword.merge(opts, apply(m, f, a))
+            _ -> opts
+          end
+
         config = %{
           endpoint: endpoint,
           transport: :websocket,
