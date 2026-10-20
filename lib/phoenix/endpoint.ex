@@ -1017,7 +1017,7 @@ defmodule Phoenix.Endpoint do
       open after it last received data, defaults to 60_000ms
 
     * `:max_frame_size` - the maximum allowed frame size in bytes,
-      defaults to "infinity"
+      defaults to 10_000_000 bytes. Set to `:infinity` to disable the limit
 
     * `:fullsweep_after` - the maximum number of garbage collections
       before forcing a fullsweep for the socket process. You can set
