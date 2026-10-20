@@ -215,7 +215,7 @@ defmodule Phoenix.Endpoint do
     * `:log_access_url` - log the access url once the server boots
 
   Note that you can also store your own configurations in the Phoenix.Endpoint.
-  For example, [Phoenix LiveView](https://hexdocs.pm/phoenix_live_view) expects
+  For example, [Phoenix LiveView](https://phoenix-live-view.hexdocs.pm) expects
   its own configuration under the `:live_view` key. In such cases, you should
   consult the documentation of the respective projects.
 
@@ -232,13 +232,13 @@ defmodule Phoenix.Endpoint do
   top-level options:
 
     * `:http` - the configuration for the HTTP server. It accepts all options
-      as defined by either [`Bandit`](https://hexdocs.pm/bandit/Bandit.html#t:options/0)
-      or [`Plug.Cowboy`](https://hexdocs.pm/plug_cowboy/) depending on your
+      as defined by either [`Bandit`](https://bandit.hexdocs.pm/Bandit.html#t:options/0)
+      or [`Plug.Cowboy`](https://plug-cowboy.hexdocs.pm/) depending on your
       choice of adapter. Defaults to `false`
 
     * `:https` - the configuration for the HTTPS server. It accepts all options
-      as defined by either [`Bandit`](https://hexdocs.pm/bandit/Bandit.html#t:options/0)
-      or [`Plug.Cowboy`](https://hexdocs.pm/plug_cowboy/) depending on your
+      as defined by either [`Bandit`](https://bandit.hexdocs.pm/Bandit.html#t:options/0)
+      or [`Plug.Cowboy`](https://plug-cowboy.hexdocs.pm/) depending on your
       choice of adapter. Defaults to `false`
 
   In addition, the connection draining can be configured for the Cowboy webserver via the following
@@ -726,6 +726,8 @@ defmodule Phoenix.Endpoint do
             :compress,
             :subprotocols,
             :error_handler,
+            :validate_utf8,
+            :active_n,
             :deflate_options
           ]
       )
@@ -939,7 +941,7 @@ defmodule Phoenix.Endpoint do
       endpoint configuration
 
     * `:connect_info` - a list of keys that represent data to be copied from
-      the transport to be made available in the user socket `connect/3` callback.
+      the transport to be made available in the user socket `c:Phoenix.Socket.connect/3` callback.
       See the "Connect info" subsection for valid keys
 
   ### Connect info
@@ -1061,6 +1063,20 @@ defmodule Phoenix.Endpoint do
 
     * `:crypto` - options for verifying and signing the token, accepted
       by `Phoenix.Token`. By default tokens are valid for 2 weeks
+
+  > #### Long polling and resource exhaustion {: .warning}
+  >
+  > The long polling transport opens up a process in the cluster that stays
+  > alive, by default, for `:window_ms` times 1.5 (15 seconds) after its last
+  > poll. Because a session is created on demand for every request, an attacker
+  > can use this to cheaply spawn hundreds of thousands of processes on a single
+  > node, potentially approaching Erlang's default process limit of roughly one
+  > million. We recommend rate limiting long polling requests, either with a rate
+  > limiter such as [Hammer](https://hexdocs.pm/hammer) or, even better, at the
+  > load balancer and infrastructure level.
+  >
+  > The socket `c:Phoenix.Socket.connect/3` callback is the proper way to perform
+  > such rate limiting.
 
   """
   defmacro socket(path, module, opts \\ []) do

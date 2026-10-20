@@ -26,7 +26,7 @@ defmodule Phoenix.Debug do
   For example, when using Phoenix LiveView, the browser establishes a socket
   connection when initially navigating to the page, and each live navigation
   retains the same socket connection. Nested LiveViews also share the same
-  connection, each being a different channel. See `Phoenix.Debug.channels/1`.
+  connection, each being a different channel. See `Phoenix.Debug.list_channels/1`.
 
   ## Examples
 
@@ -81,7 +81,8 @@ defmodule Phoenix.Debug do
   @doc """
   Checks if the given pid is a `Phoenix.Channel` process.
 
-  Note: this function returns false for [custom channels](https://hexdocs.pm/phoenix/Phoenix.Socket.html#module-custom-channels).
+  > ### Custom channels {: .info}
+  > This function always returns `false` for [custom channels](`m:Phoenix.Socket#module-custom-channels`).
   """
   def channel_process?(pid) do
     # Phoenix.Channel sets the "$process_label" to {Phoenix.Socket, handler_module, id}
@@ -104,9 +105,10 @@ defmodule Phoenix.Debug do
     - `:status` - the status of the channel
     - `:topic` - the topic of the channel
 
-  Note that this list also contains [custom channels](https://hexdocs.pm/phoenix/Phoenix.Socket.html#module-custom-channels)
-  like LiveViews. You can check if a channel is a custom channel by using the `channel?/1`
-  function, which returns `false` for custom channels.
+  > ### Custom channels {: .info}
+  > Note that the list also contains [custom channels](`m:Phoenix.Socket#module-custom-channels`)
+  > like LiveViews. You can check if a channel is a custom channel by using the
+  > `channel_process?/1` function, which returns `false` for custom channels.
 
   ## Examples
 

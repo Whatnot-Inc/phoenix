@@ -162,6 +162,15 @@ defmodule Phoenix.Integration.WebSocketChannelsTest do
     def handle_error(conn, :rate_limit), do: Plug.Conn.send_resp(conn, 429, "Too many requests")
   end
 
+  defmodule LimitedUserSocket do
+    use Phoenix.Socket, max_channels_per_transport: 1
+
+    channel "room:*", RoomChannel
+
+    def connect(_params, socket), do: {:ok, socket}
+    def id(_socket), do: nil
+  end
+
   defmodule Endpoint do
     use Phoenix.Endpoint, otp_app: :phoenix
 
@@ -177,6 +186,12 @@ defmodule Phoenix.Integration.WebSocketChannelsTest do
       ]
 
     socket "/ws/admin", UserSocket,
+      websocket: [
+        check_origin: ["//example.com"],
+        timeout: 200
+      ]
+
+    socket "/ws/limited", LimitedUserSocket,
       websocket: [
         check_origin: ["//example.com"],
         timeout: 200
@@ -309,6 +324,161 @@ defmodule Phoenix.Integration.WebSocketChannelsTest do
 
           WebsocketClient.send_event(sock, lobby, "new_msg", %{body: "Should ignore"})
           refute_receive %Message{event: "new_msg"}
+        end
+
+        test "rejects the 101st channel join by default" do
+          {:ok, sock} = WebsocketClient.connect(self(), @vsn_path, @serializer)
+          prefix = "room:limit-#{System.unique_integer([:positive])}"
+
+          for index <- 1..100 do
+            topic = "#{prefix}-#{index}"
+            WebsocketClient.join(sock, topic, %{})
+
+            assert_receive %Message{
+              event: "phx_reply",
+              payload: %{"response" => %{}, "status" => "ok"},
+              topic: ^topic
+            }
+
+            assert_receive %Message{
+              event: "joined",
+              payload: %{"status" => "connected", "user_id" => nil},
+              topic: ^topic
+            }
+
+            assert_receive %Message{
+              event: "user_entered",
+              payload: %{"user" => nil},
+              topic: ^topic
+            }
+          end
+
+          overflow_topic = "#{prefix}-101"
+          WebsocketClient.join(sock, overflow_topic, %{})
+
+          assert_receive %Message{
+            event: "phx_reply",
+            payload: %{
+              "response" => %{"reason" => "too many channels joined"},
+              "status" => "error"
+            },
+            ref: "101",
+            topic: ^overflow_topic
+          }
+        end
+
+        test "honors configured max_channels_per_transport" do
+          {:ok, sock} =
+            WebsocketClient.connect(
+              self(),
+              "ws://127.0.0.1:#{@port}/ws/limited/websocket?vsn=#{@vsn}",
+              @serializer
+            )
+
+          WebsocketClient.join(sock, "room:limited-1", %{})
+
+          assert_receive %Message{
+            event: "phx_reply",
+            payload: %{"response" => %{}, "status" => "ok"},
+            ref: "1",
+            topic: "room:limited-1"
+          }
+
+          WebsocketClient.join(sock, "room:limited-2", %{})
+
+          assert_receive %Message{
+            event: "phx_reply",
+            payload: %{
+              "response" => %{"reason" => "too many channels joined"},
+              "status" => "error"
+            },
+            ref: "2",
+            topic: "room:limited-2"
+          }
+        end
+
+        test "emits joined-channel telemetry while enforcing the channel limit", ctx do
+          topic = lobby()
+          overflow_topic = lobby()
+          parent = self()
+          handler_id = {__MODULE__, ctx.test}
+
+          :ok =
+            :telemetry.attach(
+              handler_id,
+              [:phoenix, :socket, :joined_channels],
+              fn _event, measurements, %{topic: event_topic} = metadata, _config ->
+                if event_topic in [topic, overflow_topic] do
+                  send(parent, {:joined_channels, measurements, metadata})
+                end
+              end,
+              nil
+            )
+
+          on_exit(fn -> :telemetry.detach(handler_id) end)
+
+          {:ok, sock} =
+            WebsocketClient.connect(
+              self(),
+              "ws://127.0.0.1:#{@port}/ws/limited/websocket?vsn=#{@vsn}",
+              @serializer
+            )
+
+          WebsocketClient.join(sock, topic, %{user: "first"})
+
+          assert_receive %Message{
+            event: "phx_reply",
+            payload: %{"status" => "ok"},
+            topic: ^topic
+          }
+
+          assert_receive {:joined_channels, %{channels: [^topic]},
+                          %{
+                            assigns: %{},
+                            topic: ^topic,
+                            operation: :join,
+                            payload: %{"user" => "first"}
+                          }}
+
+          WebsocketClient.join(sock, overflow_topic, %{})
+
+          assert_receive %Message{
+            event: "phx_reply",
+            payload: %{
+              "response" => %{"reason" => "too many channels joined"},
+              "status" => "error"
+            },
+            topic: ^overflow_topic
+          }
+
+          refute_receive {:joined_channels, _, %{operation: :join, topic: ^overflow_topic}}
+
+          WebsocketClient.leave(sock, topic, %{reason: "done"})
+
+          assert_receive {:joined_channels, %{channels: []},
+                          %{
+                            assigns: %{},
+                            topic: ^topic,
+                            operation: :leave,
+                            payload: %{"reason" => "done"}
+                          }}
+
+          assert_receive %Message{event: "phx_close", topic: ^topic}
+
+          WebsocketClient.join(sock, overflow_topic, %{user: "second"})
+
+          assert_receive %Message{
+            event: "phx_reply",
+            payload: %{"status" => "ok"},
+            topic: ^overflow_topic
+          }
+
+          assert_receive {:joined_channels, %{channels: [^overflow_topic]},
+                          %{
+                            topic: ^overflow_topic,
+                            operation: :join,
+                            payload: %{"user" => "second"}
+                          }}
         end
 
         test "transport x_headers are extracted to the socket connect_info" do
@@ -598,7 +768,12 @@ defmodule Phoenix.Integration.WebSocketChannelsTest do
 
           capture_log(fn ->
             WebsocketClient.send_event(sock, lobby, "boom", %{})
-            assert_receive %Message{event: "phx_error", payload: %{}, topic: ^lobby}
+
+            assert_receive %Message{
+              event: "phx_error",
+              payload: %{"reason" => "channel_crash"},
+              topic: ^lobby
+            }
           end)
         end
 

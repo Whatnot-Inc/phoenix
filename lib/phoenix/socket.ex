@@ -25,11 +25,11 @@ defmodule Phoenix.Socket do
 
   Socket handlers are mounted in Endpoints and must define two callbacks:
 
-    * `connect/3` - receives the socket params, connection info if any, and
+    * `c:connect/3` - receives the socket params, connection info if any, and
       authenticates the connection. Must return a `Phoenix.Socket` struct,
       often with custom assigns
 
-    * `id/1` - receives the socket returned by `connect/3` and returns the
+    * `c:id/1` - receives the socket returned by `c:connect/3` and returns the
       id of this connection as a string. The `id` is used to identify socket
       connections, often to a particular user, allowing us to force disconnections.
       For sockets requiring no authentication, `nil` can be returned
@@ -78,6 +78,9 @@ defmodule Phoenix.Socket do
     * `:partitions` - each channel is spawned under a supervisor.
       This option controls how many supervisors will be spawned
       to handle channels. Defaults to the number of cores.
+
+    * `:max_channels_per_transport` - the maximum number of channels that may be
+      joined per transport process. Defaults to `100`.
 
   ## Garbage collection
 
@@ -213,8 +216,7 @@ defmodule Phoenix.Socket do
 
   To deny connection, return `:error` or `{:error, term}`. To control the
   response the client receives in that case, [define an error handler in the
-  websocket
-  configuration](https://hexdocs.pm/phoenix/Phoenix.Endpoint.html#socket/3-websocket-configuration).
+  websocket configuration](`Phoenix.Endpoint.socket/3#websocket-configuration`).
 
   See `Phoenix.Token` documentation for examples in
   performing token verification on connect.
@@ -223,7 +225,7 @@ defmodule Phoenix.Socket do
               {:ok, Socket.t()} | {:error, term} | :error
 
   @doc """
-  Shortcut version of `connect/3` which does not receive `connect_info`.
+  Shortcut version of `c:connect/3` which does not receive `connect_info`.
 
   Provided for backwards compatibility.
   """
@@ -501,7 +503,16 @@ defmodule Phoenix.Socket do
 
     case negotiate_serializer(Keyword.fetch!(options, :serializer), vsn) do
       {:ok, serializer} ->
-        result = user_connect(user_socket, endpoint, transport, serializer, params, connect_info)
+        result =
+          user_connect(
+            user_socket,
+            endpoint,
+            transport,
+            serializer,
+            params,
+            connect_info,
+            options
+          )
 
         metadata = %{
           endpoint: endpoint,
@@ -556,7 +567,11 @@ defmodule Phoenix.Socket do
   end
 
   def __info__(%Broadcast{event: "disconnect"}, state) do
-    {:stop, {:shutdown, :disconnected}, state}
+    # Close code 1001 ("Going Away") signals the client that the connection
+    # is intentionally closed but a reconnect is expected — phoenix.js gates
+    # reconnects behind a closeCode !== 1000 check.
+    # See https://github.com/mtrudel/bandit/issues/582.
+    {:stop, {:shutdown, :disconnected}, 1001, state}
   end
 
   def __info__(:socket_drain, state) do
@@ -624,7 +639,7 @@ defmodule Phoenix.Socket do
     :error
   end
 
-  defp user_connect(handler, endpoint, transport, serializer, params, connect_info) do
+  defp user_connect(handler, endpoint, transport, serializer, params, connect_info, options) do
     # The information in the Phoenix.Socket goes to userland and channels.
     socket = %Socket{
       handler: handler,
@@ -637,7 +652,8 @@ defmodule Phoenix.Socket do
     # The information in the state is kept only inside the socket process.
     state = %{
       channels: %{},
-      channels_inverse: %{}
+      channels_inverse: %{},
+      max_channels_per_transport: Keyword.get(options, :max_channels_per_transport, 100)
     }
 
     connect_result =
@@ -705,33 +721,60 @@ defmodule Phoenix.Socket do
        ) do
     case socket.handler.__channel__(topic) do
       {channel, opts} ->
-        case Phoenix.Channel.Server.join(socket, channel, message, opts) do
-          {:ok, reply, pid} ->
-            reply = %Reply{
-              join_ref: join_ref,
-              ref: ref,
-              topic: topic,
-              status: :ok,
-              payload: reply
-            }
+        if map_size(state.channels) >= state.max_channels_per_transport do
+          Logger.error(
+            "Reached max channels per transport limit of #{state.max_channels_per_transport} for socket #{inspect(socket.id)}"
+          )
 
-            state = put_channel(state, pid, topic, join_ref)
-            payload = Map.get(message, :payload, %{})
-            metadata = %{assigns: socket.assigns, topic: topic, operation: :join, payload: payload}
-            :telemetry.execute([:phoenix, :socket, :joined_channels],
-              %{channels: joined_channels(state)}, metadata)
-            {:reply, :ok, encode_reply(socket, reply), {state, socket}}
+          reply = %Reply{
+            join_ref: join_ref,
+            ref: ref,
+            topic: topic,
+            status: :error,
+            payload: %{reason: "too many channels joined"}
+          }
 
-          {:error, reply} ->
-            reply = %Reply{
-              join_ref: join_ref,
-              ref: ref,
-              topic: topic,
-              status: :error,
-              payload: reply
-            }
+          {:reply, :error, encode_reply(socket, reply), {state, socket}}
+        else
+          case Phoenix.Channel.Server.join(socket, channel, message, opts) do
+            {:ok, reply, pid} ->
+              reply = %Reply{
+                join_ref: join_ref,
+                ref: ref,
+                topic: topic,
+                status: :ok,
+                payload: reply
+              }
 
-            {:reply, :error, encode_reply(socket, reply), {state, socket}}
+              state = put_channel(state, pid, topic, join_ref)
+              payload = Map.get(message, :payload, %{})
+
+              metadata = %{
+                assigns: socket.assigns,
+                topic: topic,
+                operation: :join,
+                payload: payload
+              }
+
+              :telemetry.execute(
+                [:phoenix, :socket, :joined_channels],
+                %{channels: joined_channels(state)},
+                metadata
+              )
+
+              {:reply, :ok, encode_reply(socket, reply), {state, socket}}
+
+            {:error, reply} ->
+              reply = %Reply{
+                join_ref: join_ref,
+                ref: ref,
+                topic: topic,
+                status: :error,
+                payload: reply
+              }
+
+              {:reply, :error, encode_reply(socket, reply), {state, socket}}
+          end
         end
 
       _ ->
@@ -763,16 +806,20 @@ defmodule Phoenix.Socket do
     %{topic: topic, join_ref: join_ref} = msg
 
     case state.channels_inverse do
-      # we need to match on nil to handle v1 protocol
-      %{^pid => {^topic, existing_join_ref}} when existing_join_ref in [join_ref, nil] ->
+      %{^pid => {^topic, existing_join_ref}}
+      when is_nil(join_ref) or join_ref === existing_join_ref ->
         send(pid, msg)
 
         payload = Map.get(msg, :payload, %{})
         metadata = %{assigns: socket.assigns, topic: topic, operation: :leave, payload: payload}
         state = update_channel_status(state, pid, topic, :leaving)
 
-        :telemetry.execute([:phoenix, :socket, :joined_channels],
-          %{channels: joined_channels(state)}, metadata)
+        :telemetry.execute(
+          [:phoenix, :socket, :joined_channels],
+          %{channels: joined_channels(state)},
+          metadata
+        )
+
         {:ok, {state, socket}}
 
       # the client has raced a server close. No need to reply since we already sent close
@@ -785,8 +832,11 @@ defmodule Phoenix.Socket do
     %{topic: topic, join_ref: join_ref} = msg
 
     case state.channels_inverse do
-      # we need to match on nil to handle v1 protocol
-      %{^pid => {^topic, existing_join_ref}} when existing_join_ref in [join_ref, nil] ->
+      # a nil join_ref is valid on non-join messages;
+      # phoenix.js also sends it on each message, but the protocol does not
+      # require it. Also, v1 protocol clients may send nil.
+      %{^pid => {^topic, existing_join_ref}}
+      when is_nil(join_ref) or join_ref === existing_join_ref ->
         send(pid, msg)
         {:ok, {state, socket}}
 
@@ -842,7 +892,14 @@ defmodule Phoenix.Socket do
   end
 
   defp encode_on_exit(socket, topic, ref, _reason) do
-    message = %Message{join_ref: ref, ref: ref, topic: topic, event: "phx_error", payload: %{}}
+    message = %Message{
+      join_ref: ref,
+      ref: ref,
+      topic: topic,
+      event: "phx_error",
+      payload: %{reason: "channel_crash"}
+    }
+
     encode_reply(socket, message)
   end
 
@@ -899,9 +956,9 @@ defmodule Phoenix.Socket do
   end
 
   defp joined_channels(state) do
-    Enum.flat_map(state.channels,
-      fn {topic, {_, _, :joined}} -> [topic]
-        _ -> []
-      end)
+    Enum.flat_map(state.channels, fn
+      {topic, {_, _, :joined}} -> [topic]
+      _ -> []
+    end)
   end
 end
