@@ -1,6 +1,6 @@
 # Writing a Channels Client
 
-Client libraries for Phoenix Channels already exist in [several languages](https://hexdocs.pm/phoenix/channels.html#client-libraries), but if you want to write your own, this guide should get you started.
+Client libraries for Phoenix Channels already exist in [several languages](https://phoenix.hexdocs.pm/channels.html#client-libraries), but if you want to write your own, this guide should get you started.
 It may also be useful as a guide for manual testing with a WebSocket client.
 
 ## Overview
@@ -34,11 +34,11 @@ The general format for messages a client sends to a Phoenix Channel is as follow
 [join_reference, message_reference, topic_name, event_name, payload]
 ```
 
-- The `join_reference` is also chosen by the client and should also be a unique value. It only needs to be sent for a `"phx_join"` event; for other messages it can be `null`. It is used as a message reference for `push` messages from the server, meaning those that are not replies to a specific client message. For example, imagine something like "a new user just joined the chat room".
+- The `join_reference` is also chosen by the client and should be a unique value. It must be sent for a `"phx_join"` event. Clients should also send the current `join_reference` with subsequent messages to the channel so the server can discard stale messages from a previous join. The server accepts `null` for backwards compatibility. The `join_reference` is also used as a message reference for `push` messages from the server, meaning those that are not replies to a specific client message. For example, imagine something like "a new user just joined the chat room".
 - The `message_reference` is chosen by the client and should be a unique value. The server includes it in its reply so that the client knows which message the reply is for.
 - The `topic_name` must be a known topic for the socket endpoint, and a client must join that topic before sending any messages on it.
 - The `event_name` must match the first argument of a `handle_in` function on the server channel module.
-- The `payload` should be a map and is passed as the second argument to that `handle_in` function.
+- The `payload` should be a serializable value (typically JSON-serializable, depends on the Socket configuration) and is passed as the second argument to that `handle_in` function.
 
 There are three events that are understood by every Phoenix application.
 
@@ -51,7 +51,7 @@ First, `phx_join` is used join a channel. For example, to join the `miami:weathe
 Second, `phx_leave` is used to leave a channel. For example, to leave the `miami:weather` channel:
 
 ```json
-[null, "1", "miami:weather", "phx_leave", {}]
+["0", "1", "miami:weather", "phx_leave", {}]
 ```
 
 Third, `heartbeat` is used to maintain the WebSocket connection. For example:
@@ -77,5 +77,5 @@ end
 ...a client could send:
 
 ```json
-[null, "3", "miami:weather", "report_emergency", {"category": "sharknado"}]
+["0", "3", "miami:weather", "report_emergency", {"category": "sharknado"}]
 ```

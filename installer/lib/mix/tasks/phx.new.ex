@@ -116,7 +116,7 @@ defmodule Mix.Tasks.Phx.New do
   ```
 
   You can read more about umbrella projects in the
-  [mix documentation](https://hexdocs.pm/mix/Mix.Project.html#module-umbrella-projects)
+  [mix documentation](https://mix.hexdocs.pm/Mix.Project.html#module-umbrella-projects)
 
   ## `PHX_NEW_CACHE_DIR`
 
@@ -482,10 +482,10 @@ defmodule Mix.Tasks.Phx.New do
   end
 
   defp elixir_version_check! do
-    unless Version.match?(System.version(), "~> 1.15") do
+    unless Version.match?(System.version(), "~> 1.17") do
       Mix.raise(
-        "Phoenix v#{@version} requires at least Elixir v1.15\n " <>
-          "You have #{System.version()}. Please update accordingly"
+        "Phoenix v#{@version} installer requires Elixir v1.17 or later, " <>
+          "but you are running v#{System.version()}"
       )
     end
   end

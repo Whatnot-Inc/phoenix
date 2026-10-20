@@ -1,7 +1,7 @@
 import {jest} from "@jest/globals"
 import {LongPoll} from "../js/phoenix"
 import {Socket} from "../js/phoenix"
-import {AUTH_TOKEN_PREFIX} from "../js/phoenix/constants"
+import {AUTH_TOKEN_PREFIX, SOCKET_STATES} from "../js/phoenix/constants"
 import Ajax from "../js/phoenix/ajax"
 
 describe("LongPoll", () => {
@@ -253,6 +253,51 @@ describe("LongPoll", () => {
         jest.useRealTimers()
       }
     })
+
+    it("closes and retries when a batch POST times out", () => {
+      jest.useFakeTimers()
+      try {
+        const longpoll = new LongPoll("http://localhost/socket/longpoll", undefined)
+        longpoll.timeout = 1000
+        longpoll.poll = jest.fn()
+        longpoll.readyState = SOCKET_STATES.open
+
+        const onerror = jest.fn()
+        const onclose = jest.fn()
+        longpoll.onerror = onerror
+        longpoll.onclose = onclose
+
+        const calls = []
+        Ajax.request.mockImplementation((method, url, headers, body, timeout, ontimeout, callback) => {
+          calls.push({method, body, ontimeout, callback})
+          return {abort: jest.fn()}
+        })
+
+        longpoll.send("a")
+        jest.runOnlyPendingTimers()
+
+        expect(calls).toHaveLength(1)
+        expect(longpoll.awaitingBatchAck).toBe(true)
+
+        // the POST times out on the caller side
+        calls[0].ontimeout()
+
+        expect(onerror).toHaveBeenCalledWith("timeout")
+        expect(onclose).toHaveBeenCalled()
+        expect(longpoll.readyState).toBe(SOCKET_STATES.connecting)
+        expect(longpoll.awaitingBatchAck).toBe(false)
+
+        // later sends must not be silently buffered on the dead batch
+        longpoll.send("b")
+        jest.runOnlyPendingTimers()
+
+        expect(longpoll.batchBuffer).toEqual([])
+        expect(calls).toHaveLength(2)
+        expect(calls[1].body).toBe("b")
+      } finally {
+        jest.useRealTimers()
+      }
+    })
   })
 })
 
@@ -282,12 +327,9 @@ describe("Socket with LongPoll", () => {
       const authToken = "my-auth-token"
       const socket = new Socket("/socket", {
         transport: LongPoll,
-        params: {token: authToken}
+        authToken
       })
-      
-      // Set auth token
-      socket.authToken = authToken
-      
+
       // Mock the transport to capture the protocols argument
       socket.transport = jest.fn(() => ({
         onopen: jest.fn(),
@@ -368,5 +410,87 @@ describe("Ajax.request", () => {
       })
     )
   })
-})
 
+  it("clears the timeout timer when fetch completes successfully", () => {
+    global.XMLHttpRequest = undefined
+    const setTimeoutSpy = jest.spyOn(global, "setTimeout")
+    const clearTimeoutSpy = jest.spyOn(global, "clearTimeout")
+
+    return new Promise((resolve, reject) => {
+      Ajax.request("GET", "/test-endpoint", {}, null, 5000, null, (response) => {
+        try {
+          expect(response).toEqual({success: true})
+          const timerId = setTimeoutSpy.mock.results[0].value
+          expect(clearTimeoutSpy).toHaveBeenCalledWith(timerId)
+          resolve()
+        } catch(err){
+          reject(err)
+        }
+      })
+    })
+  })
+
+  it("clears the timeout timer when fetch errors", () => {
+    global.XMLHttpRequest = undefined
+    global.fetch = jest.fn(() => Promise.reject(new Error("Network error")))
+    const setTimeoutSpy = jest.spyOn(global, "setTimeout")
+    const clearTimeoutSpy = jest.spyOn(global, "clearTimeout")
+
+    return new Promise((resolve, reject) => {
+      Ajax.request("GET", "/test-endpoint", {}, null, 5000, null, (response) => {
+        try {
+          expect(response).toBeNull()
+          const timerId = setTimeoutSpy.mock.results[0].value
+          expect(clearTimeoutSpy).toHaveBeenCalledWith(timerId)
+          resolve()
+        } catch(err){
+          reject(err)
+        }
+      })
+    })
+  })
+
+  it("does not set or clear timeout timer when timeout is 0 or not specified", () => {
+    global.XMLHttpRequest = undefined
+    const setTimeoutSpy = jest.spyOn(global, "setTimeout")
+    const clearTimeoutSpy = jest.spyOn(global, "clearTimeout")
+
+    return new Promise((resolve, reject) => {
+      Ajax.request("GET", "/test-endpoint", {}, null, 0, null, (response) => {
+        try {
+          expect(response).toEqual({success: true})
+          expect(setTimeoutSpy).not.toHaveBeenCalled()
+          expect(clearTimeoutSpy).not.toHaveBeenCalled()
+          resolve()
+        } catch(err){
+          reject(err)
+        }
+      })
+    })
+  })
+
+  it("invokes ontimeout and clears timer when fetch rejects with AbortError", () => {
+    global.XMLHttpRequest = undefined
+    const abortError = new Error("The user aborted a request.")
+    abortError.name = "AbortError"
+    global.fetch = jest.fn(() => Promise.reject(abortError))
+    const setTimeoutSpy = jest.spyOn(global, "setTimeout")
+    const clearTimeoutSpy = jest.spyOn(global, "clearTimeout")
+
+    return new Promise((resolve, reject) => {
+      const callback = jest.fn(() => reject(new Error("callback should not be called on AbortError")))
+      const ontimeout = () => {
+        try {
+          expect(callback).not.toHaveBeenCalled()
+          const timerId = setTimeoutSpy.mock.results[0].value
+          expect(clearTimeoutSpy).toHaveBeenCalledWith(timerId)
+          resolve()
+        } catch(err){
+          reject(err)
+        }
+      }
+
+      Ajax.request("GET", "/test-endpoint", {}, null, 5000, ontimeout, callback)
+    })
+  })
+})

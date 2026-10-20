@@ -433,6 +433,18 @@ defmodule Phoenix.Controller.ControllerTest do
       assert_raise ArgumentError, ~r/unsafe/, fn ->
         redirect(conn(:get, "/"), to: "/\t/example.com")
       end
+
+      assert_raise ArgumentError, ~r/unsafe/, fn ->
+        redirect(conn(:get, "/"), to: "/\n/example.com")
+      end
+
+      assert_raise ArgumentError, ~r/unsafe/, fn ->
+        redirect(conn(:get, "/"), to: "/\r/example.com")
+      end
+
+      assert_raise ArgumentError, ~r/unsafe/, fn ->
+        redirect(conn(:get, "/"), to: "/\n\t/example.com")
+      end
     end
 
     test "with :external" do
@@ -930,7 +942,8 @@ defmodule Phoenix.Controller.ControllerTest do
   end
 
   defp sent_conn do
-    conn(:get, "/") |> send_resp(:ok, "")
+    # The type system is too smart and will notice the response is sent and calls with fail
+    Process.get(:unused, conn(:get, "/") |> send_resp(:ok, ""))
   end
 
   describe "path and url generation" do

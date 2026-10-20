@@ -8,7 +8,7 @@ defmodule Phoenix.MixProject do
     end
   end
 
-  @version "1.8.7"
+  @version "1.8.15"
   @scm_url "https://github.com/phoenixframework/phoenix"
 
   # If the elixir requirement is updated, we need to make the installer
@@ -24,8 +24,8 @@ defmodule Phoenix.MixProject do
       deps: deps(),
       package: package(),
       consolidate_protocols: Mix.env() != :test,
-      xref: [
-        exclude: [
+      elixirc_options: [
+        no_warn_undefined: [
           {IEx, :started?, 0},
           Ecto.Type,
           :ranch,
@@ -80,11 +80,11 @@ defmodule Phoenix.MixProject do
   defp deps do
     [
       {:plug, "~> 1.14"},
-      {:plug_crypto, "~> 1.2 or ~> 2.0"},
+      {:plug_crypto, "~> 2.2"},
       {:telemetry, "~> 0.4 or ~> 1.0"},
       {:phoenix_pubsub, "~> 2.1"},
       {:phoenix_template, "~> 1.0"},
-      {:websock_adapter, "~> 0.5.3"},
+      {:websock_adapter, "~> 0.5"},
 
       # TODO Drop phoenix_view as an optional dependency in Phoenix v2.0
       {:phoenix_view, "~> 2.0", optional: true},
@@ -121,11 +121,11 @@ defmodule Phoenix.MixProject do
       licenses: ["MIT"],
       links: %{
         "GitHub" => @scm_url,
-        "Changelog" => "https://hexdocs.pm/phoenix/changelog.html"
+        "Changelog" => "https://phoenix.hexdocs.pm/changelog.html"
       },
       files: ~w(
           assets/js lib priv usage-rules CHANGELOG.md LICENSE.md mix.exs package.json README.md .formatter.exs
-          installer/templates/phx_web/components/core_components.ex
+          installer/templates/phx_web/components/core_components.ex.eex
         )
     ]
   end
@@ -156,7 +156,7 @@ defmodule Phoenix.MixProject do
       logo: "logo.png",
       extra_section: "GUIDES",
       assets: %{"guides/assets" => "assets"},
-      formatters: ["html", "epub"],
+      formatters: ["html", "markdown", "epub"],
       groups_for_modules: groups_for_modules(),
       extras: extras(),
       groups_for_extras: groups_for_extras(),
@@ -286,7 +286,7 @@ defmodule Phoenix.MixProject do
 
   defp generate_js_docs(_) do
     Mix.Task.run("app.start")
-    {_, 0} = System.cmd("npm", ["install"], into: IO.stream())
+    {_, 0} = System.cmd("npm", ["ci"], into: IO.stream())
     {_, 0} = System.cmd("npm", ["run", "docs"], into: IO.stream())
   end
 

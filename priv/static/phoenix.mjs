@@ -133,6 +133,7 @@ var Push = class {
     if (this.timeoutTimer) {
       this.cancelTimeout();
     }
+    this.cancelRefEvent();
     this.ref = this.channel.socket.makeRef();
     this.refEvent = this.channel.replyEventName(this.ref);
     this.channel.on(this.refEvent, (payload) => {
@@ -517,12 +518,21 @@ var Ajax = class {
       body
     };
     let controller = null;
+    let timeoutId = null;
     if (timeout) {
       controller = new AbortController();
-      const _timeoutId = setTimeout(() => controller.abort(), timeout);
+      timeoutId = setTimeout(() => controller.abort(), timeout);
       options.signal = controller.signal;
     }
-    global.fetch(endPoint, options).then((response) => response.text()).then((data) => this.parseJSON(data)).then((data) => callback && callback(data)).catch((err) => {
+    global.fetch(endPoint, options).then((response) => response.text()).then((data) => this.parseJSON(data)).then((data) => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+      callback && callback(data);
+    }).catch((err) => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
       if (err.name === "AbortError" && ontimeout) {
         ontimeout();
       } else {
@@ -722,7 +732,7 @@ var LongPoll = class {
     this.awaitingBatchAck = true;
     const next = offset + MAX_LONGPOLL_BATCH_SIZE;
     const batch = messages.slice(offset, next);
-    this.ajax("POST", { "Content-Type": "application/x-ndjson" }, batch.join("\n"), () => this.onerror("timeout"), (resp) => {
+    this.ajax("POST", { "Content-Type": "application/x-ndjson" }, batch.join("\n"), () => this.ontimeout(), (resp) => {
       if (!resp || resp.status !== 200) {
         this.awaitingBatchAck = false;
         this.onerror(resp && resp.status);
@@ -744,6 +754,7 @@ var LongPoll = class {
     this.readyState = SOCKET_STATES.closed;
     let opts = Object.assign({ code: 1e3, reason: void 0, wasClean: true }, { code, reason, wasClean });
     this.batchBuffer = [];
+    this.awaitingBatchAck = false;
     clearTimeout(this.currentBatchTimer);
     this.currentBatchTimer = null;
     if (typeof CloseEvent !== "undefined") {
@@ -772,7 +783,7 @@ var LongPoll = class {
 var Presence = class _Presence {
   constructor(channel, opts = {}) {
     let events = opts.events || { state: "presence_state", diff: "presence_diff" };
-    this.state = {};
+    this.state = /* @__PURE__ */ Object.create(null);
     this.pendingDiffs = [];
     this.channel = channel;
     this.joinRef = null;
@@ -829,9 +840,10 @@ var Presence = class _Presence {
    * @returns {Presence}
    */
   static syncState(currentState, newState, onJoin, onLeave) {
-    let state = this.clone(currentState);
-    let joins = {};
-    let leaves = {};
+    let state = this.toNullProtoObj(this.clone(currentState));
+    newState = this.toNullProtoObj(newState);
+    let joins = /* @__PURE__ */ Object.create(null);
+    let leaves = /* @__PURE__ */ Object.create(null);
     this.map(state, (key, presence) => {
       if (!newState[key]) {
         leaves[key] = presence;
@@ -868,6 +880,7 @@ var Presence = class _Presence {
    * @returns {Presence}
    */
   static syncDiff(state, diff, onJoin, onLeave) {
+    state = this.toNullProtoObj(state);
     let { joins, leaves } = this.clone(diff);
     if (!onJoin) {
       onJoin = function() {
@@ -924,6 +937,22 @@ var Presence = class _Presence {
   // private
   static map(obj, func) {
     return Object.getOwnPropertyNames(obj).map((key) => func(key, obj[key]));
+  }
+  // Presence keys are chosen on the server and may collide with
+  // Object.prototype properties ("__proto__", "constructor", ...), so any
+  // object indexed by presence key must not have a prototype chain
+  //
+  // TODO: replace the null-prototype objects with Maps in Phoenix 2.0
+  // (breaking change for the lower-level static API)
+  static toNullProtoObj(obj) {
+    if (Object.getPrototypeOf(obj) === null) {
+      return obj;
+    }
+    let cleaned = /* @__PURE__ */ Object.create(null);
+    Object.getOwnPropertyNames(obj).forEach((key) => {
+      cleaned[key] = obj[key];
+    });
+    return cleaned;
   }
   static clone(obj) {
     return JSON.parse(JSON.stringify(obj));
@@ -1070,7 +1099,6 @@ var Socket = class {
     this.disconnecting = false;
     this.binaryType = opts.binaryType || "arraybuffer";
     this.connectClock = 1;
-    this.pageHidden = false;
     if (this.transport !== LongPoll) {
       this.encode = opts.encode || this.defaultEncoder;
       this.decode = opts.decode || this.defaultDecoder;
@@ -1093,14 +1121,10 @@ var Socket = class {
         }
       });
       phxWindow.addEventListener("visibilitychange", () => {
-        if (document.visibilityState === "hidden") {
-          this.pageHidden = true;
-        } else {
-          this.pageHidden = false;
-          if (!this.isConnected() && !this.closeWasClean) {
-            this.teardown(() => this.connect());
-          }
-        }
+        this.handleVisibilityChange();
+      });
+      phxWindow.document && phxWindow.document.addEventListener("resume", () => {
+        this.handleVisibilityChange();
       });
     }
     this.heartbeatIntervalMs = opts.heartbeatIntervalMs || 3e4;
@@ -1139,7 +1163,23 @@ var Socket = class {
       }
       this.teardown(() => this.connect());
     }, this.reconnectAfterMs);
-    this.authToken = opts.authToken;
+    this.authToken = opts.authToken && closure(opts.authToken);
+  }
+  /**
+   * @internal
+   */
+  get pageHidden() {
+    return phxWindow && phxWindow.document ? phxWindow.document.visibilityState === "hidden" : false;
+  }
+  /**
+   * @internal
+   */
+  handleVisibilityChange() {
+    if (!this.pageHidden) {
+      if (!this.isConnected() && !this.closeWasClean) {
+        this.teardown(() => this.connect());
+      }
+    }
   }
   /**
    * Returns the LongPoll transport reference
@@ -1159,8 +1199,21 @@ var Socket = class {
     clearTimeout(this.fallbackTimer);
     this.reconnectTimer.reset();
     if (this.conn) {
+      const wasOpen = this.isConnected();
+      this.conn.onopen = function() {
+      };
+      this.conn.onerror = function() {
+      };
+      this.conn.onmessage = function() {
+      };
+      this.conn.onclose = function() {
+      };
       this.conn.close();
       this.conn = null;
+      this.clearHeartbeats();
+      if (wasOpen) {
+        this.triggerChanError("connection_closed");
+      }
     }
     this.transport = newTransport;
   }
@@ -1330,7 +1383,7 @@ var Socket = class {
     this.closeWasClean = false;
     let protocols = void 0;
     if (this.authToken) {
-      protocols = ["phoenix", `${AUTH_TOKEN_PREFIX}${btoa(this.authToken).replace(/=/g, "")}`];
+      protocols = ["phoenix", `${AUTH_TOKEN_PREFIX}${btoa(this.authToken()).replace(/=/g, "")}`];
     }
     this.conn = new this.transport(this.endPointURL(), protocols);
     this.conn.binaryType = this.binaryType;
@@ -1415,7 +1468,7 @@ var Socket = class {
       if (this.hasLogger()) {
         this.log("transport", "heartbeat timeout. Attempting to re-establish connection");
       }
-      this.triggerChanError();
+      this.triggerChanError("heartbeat_timeout");
       this.closeWasClean = false;
       this.teardown(() => this.reconnectTimer.scheduleTimeout(), WS_CLOSE_NORMAL, "heartbeat timeout");
     }
@@ -1478,7 +1531,7 @@ var Socket = class {
     };
     let closeCode = event && event.code;
     if (this.hasLogger()) this.log("transport", "close", event);
-    this.triggerChanError();
+    this.triggerChanError("connection_closed");
     this.clearHeartbeats();
     if (!this.closeWasClean && closeCode !== 1e3) {
       this.reconnectTimer.scheduleTimeout();
@@ -1496,16 +1549,16 @@ var Socket = class {
       callback(error, transportBefore, establishedBefore);
     });
     if (transportBefore === this.transport || establishedBefore > 0) {
-      this.triggerChanError();
+      this.triggerChanError("connection_error");
     }
   }
   /**
    * @private
    */
-  triggerChanError() {
+  triggerChanError(reason) {
     this.channels.forEach((channel) => {
       if (!(channel.isErrored() || channel.isLeaving() || channel.isClosed())) {
-        channel.trigger(CHANNEL_EVENTS.error);
+        channel.trigger(CHANNEL_EVENTS.error, { source: "transport", reason });
       }
     });
   }
